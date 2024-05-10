@@ -10,20 +10,13 @@ emu_pid=
 
 export PATH="$PATH:$ANDROID_SDK_ROOT/platform-tools"
 
-# We test at least these API levels for the following reason
-
-# API 23: legacy rootfs w/o Treble
-# API 26: legacy rootfs with Treble
-# API 28: legacy system-as-root
-# API 29: 2 Stage Init
-# API 34: latest Android
-
-api_list='23 26 28 29 34'
-
+min_api=23
+max_api=34
 atd_min_api=30
 atd_max_api=34
 lsposed_min_api=27
 huge_ram_min_api=26
+i386_max_api=30
 
 print_title() {
   echo -e "\n\033[44;39m${1}\033[0m\n"
@@ -138,7 +131,7 @@ test_emu() {
   emu_pid=$!
   wait_emu wait_for_boot
 
-  adb shell magisk -v
+  adb shell 'PATH=$PATH:/debug_ramdisk magisk -v'
 
   # Install the Magisk app
   adb install -r -g out/app-${variant}.apk
@@ -149,7 +142,7 @@ test_emu() {
   # Install LSPosed
   if [ $api -ge $lsposed_min_api -a $api -le $atd_max_api ]; then
     adb push out/lsposed.zip /data/local/tmp/lsposed.zip
-    adb shell echo 'magisk --install-module /data/local/tmp/lsposed.zip' \| /system/xbin/su
+    adb shell echo 'PATH=$PATH:/debug_ramdisk magisk --install-module /data/local/tmp/lsposed.zip' \| /system/xbin/su
   fi
 
   adb reboot
@@ -221,6 +214,21 @@ case $(uname -m) in
     arch=x86_64
     ;;
 esac
+
+if [ -n "$FORCE_32_BIT" ]; then
+  case $arch in
+    'arm64-v8a')
+      echo "! ARM32 is not supported"
+      exit 1
+      ;;
+    'x86_64')
+      arch=x86
+      max_api=$i386_max_api
+      ;;
+  esac
+fi
+
+api_list=$(seq $min_api $max_api)
 
 yes | "$sdk" --licenses > /dev/null
 curl -L $lsposed_url -o out/lsposed.zip
